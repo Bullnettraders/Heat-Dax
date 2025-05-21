@@ -132,7 +132,7 @@ async def update_channels():
         else:
             print("❌ Keine Daten für DAX40-Trend")
 
-        await asyncio.sleep(900)  # alle 15 Minuten
+        await asyncio.sleep(300)  # alle 5 Minuten
 
 # Bot-Client-Klasse
 class DAXBot(discord.Client):
