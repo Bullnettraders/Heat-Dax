@@ -12,6 +12,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_IDS = os.getenv("CHANNEL_IDS").split(",")
 TREND_CHANNEL_ID = int(os.getenv("TREND_CHANNEL_ID"))
 
+# Top 10 DAX-Ticker → Namen
 TICKERS = {
     "SAP.DE": "SAP SE",
     "SIE.DE": "Siemens",
@@ -25,6 +26,7 @@ TICKERS = {
     "MUV2.DE": "Munich Re"
 }
 
+# DAX40-Ticker für Gesamttrend
 DAX40_TICKERS = [
     "ADS.DE", "AIR.DE", "ALV.DE", "BAS.DE", "BAYN.DE", "BEI.DE", "BMW.DE", "BNR.DE", "CON.DE", "1COV.DE",
     "DHER.DE", "DB1.DE", "DBK.DE", "DTE.DE", "EOAN.DE", "FME.DE", "FRE.DE", "HEN3.DE", "HEI.DE", "HNR1.DE",
@@ -35,6 +37,7 @@ DAX40_TICKERS = [
 logging.basicConfig(level=logging.INFO)
 intents = discord.Intents.default()
 
+# Kursveränderungen der Top 10 aus history
 def get_price_changes():
     changes = {}
     for ticker, name in TICKERS.items():
@@ -53,6 +56,7 @@ def get_price_changes():
             logging.warning(f"Fehler bei {ticker}: {e}")
     return changes
 
+# Durchschnitt aus allen DAX40-Aktien
 def get_dax40_average_change():
     changes = []
     for ticker in DAX40_TICKERS:
@@ -69,6 +73,7 @@ def get_dax40_average_change():
         return None
     return sum(changes) / len(changes)
 
+# Formatierung mit Emojis
 def format_ticker(name, change):
     if change > 0.3:
         symbol = "🟢"
@@ -78,13 +83,14 @@ def format_ticker(name, change):
         symbol = "🟡"
     return f"{symbol} {name} {change:+.2f}%"
 
+# Haupt-Update-Funktion
 async def update_channels():
     await client.wait_until_ready()
     while not client.is_closed():
         logging.info("Aktualisiere Kanäle ...")
         changes = get_price_changes()
 
-        # Einzelne Kanäle
+        # Ticker-Channels bearbeiten
         for i, (ticker, name) in enumerate(TICKERS.items()):
             print(f"→ Prüfe Kanal für {ticker} ({name})")
             if i >= len(CHANNEL_IDS):
@@ -96,12 +102,13 @@ async def update_channels():
                     new_name = format_ticker(name, changes[ticker])
                     print(f"  ✅ Aktualisiere {name}: {new_name}")
                     await channel.edit(name=new_name)
+                    await asyncio.sleep(1.5)  # Rate-Limit einhalten!
                 except Exception as e:
                     logging.error(f"Fehler bei Channel {CHANNEL_IDS[i]}: {e}")
             else:
-                print(f"  ❌ Kein Kurswert vorhanden für {ticker}")
+                print(f"  ❌ Kein Kurswert für {ticker}")
 
-        # Gesamttrend
+        # Gesamttrend-Kanal bearbeiten
         avg = get_dax40_average_change()
         if avg is not None:
             if avg > 0.3:
@@ -125,11 +132,13 @@ async def update_channels():
         else:
             print("❌ Keine Daten für DAX40-Trend")
 
-        await asyncio.sleep(900)  # 15 Minuten warten
+        await asyncio.sleep(900)  # alle 15 Minuten
 
+# Bot-Client-Klasse
 class DAXBot(discord.Client):
     async def setup_hook(self):
         self.bg_task = self.loop.create_task(update_channels())
 
+# Bot starten
 client = DAXBot(intents=intents)
 client.run(TOKEN)
