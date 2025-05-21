@@ -8,12 +8,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# 🔐 Token und IDs aus .env
+# 🔐 Token und Channel-IDs aus .env
 TOKEN = os.getenv("DISCORD_TOKEN")
-CHANNEL_IDS = os.getenv("CHANNEL_IDS").split(",")  # max. 10, Komma-getrennt
+CHANNEL_IDS = os.getenv("CHANNEL_IDS").split(",")  # Kommagetrennt, 10 IDs
 TREND_CHANNEL_ID = int(os.getenv("TREND_CHANNEL_ID"))
 
-# 🏦 DAX Top 10 – Ticker → Name
+# 🏦 Top 10 DAX Ticker → Name
 TICKERS = {
     "SAP.DE": "SAP SE",
     "SIE.DE": "Siemens",
@@ -27,7 +27,7 @@ TICKERS = {
     "MUV2.DE": "Munich Re"
 }
 
-# 📈 Alle DAX40 Ticker für den Gesamttrend
+# 📈 DAX40 Ticker-Liste
 DAX40_TICKERS = [
     "ADS.DE", "AIR.DE", "ALV.DE", "BAS.DE", "BAYN.DE", "BEI.DE", "BMW.DE", "BNR.DE", "CON.DE", "1COV.DE",
     "DHER.DE", "DB1.DE", "DBK.DE", "DTE.DE", "EOAN.DE", "FME.DE", "FRE.DE", "HEN3.DE", "HEI.DE", "HNR1.DE",
@@ -35,41 +35,42 @@ DAX40_TICKERS = [
     "SIE.DE", "SHL.DE", "SY1.DE", "VNA.DE", "VOW3.DE", "ZAL.DE", "ENR.DE", "PAH3.DE", "DWNI.DE", "NEM.DE"
 ]
 
-# 🔧 Logging
+# 🛠️ Logging
 logging.basicConfig(level=logging.INFO)
 
-# ⚙️ Intents
 intents = discord.Intents.default()
 
-# Preisveränderung der Top 10 holen
+# 📊 Kursveränderung (Top 10)
 def get_price_changes():
     changes = {}
     for ticker, name in TICKERS.items():
         try:
-            info = yf.Ticker(ticker).info
-            change = info.get("regularMarketChangePercent")
-            if change is not None:
-                changes[ticker] = round(change, 2)
+            data = yf.Ticker(ticker).fast_info
+            if "last_price" in data and "previous_close" in data and data["previous_close"] != 0:
+                percent = 100 * (data["last_price"] - data["previous_close"]) / data["previous_close"]
+                changes[ticker] = round(percent, 2)
+            else:
+                logging.warning(f"Unvollständige Daten für {ticker}")
         except Exception as e:
             logging.warning(f"Fehler bei {ticker}: {e}")
     return changes
 
-# DAX40-Trend berechnen
+# 📊 Durchschnitt aller DAX40
 def get_dax40_average_change():
     changes = []
     for ticker in DAX40_TICKERS:
         try:
-            info = yf.Ticker(ticker).info
-            change = info.get("regularMarketChangePercent")
-            if change is not None:
-                changes.append(change)
+            data = yf.Ticker(ticker).fast_info
+            if "last_price" in data and "previous_close" in data and data["previous_close"] != 0:
+                percent = 100 * (data["last_price"] - data["previous_close"]) / data["previous_close"]
+                changes.append(percent)
         except Exception as e:
-            logging.warning(f"Fehler bei DAX40-Ticker {ticker}: {e}")
+            logging.warning(f"Fehler bei {ticker}: {e}")
     if not changes:
         return None
     return sum(changes) / len(changes)
 
-# Emojis zu Kursänderung
+# 🟢🟡🔴 Emoji-Logik
 def format_ticker(name, change):
     if change > 0.3:
         symbol = "🟢"
@@ -79,14 +80,14 @@ def format_ticker(name, change):
         symbol = "🟡"
     return f"{symbol} {name} {change:+.2f}%"
 
-# Aktualisiere alle Kanäle
+# 🔁 Alle Channels aktualisieren
 async def update_channels():
     await client.wait_until_ready()
     while not client.is_closed():
         logging.info("Aktualisiere Kanäle ...")
         changes = get_price_changes()
 
-        # Einzelne Top 10-Kanäle
+        # Einzelne Top-10-Kanäle
         for i, (ticker, name) in enumerate(TICKERS.items()):
             if i >= len(CHANNEL_IDS):
                 break
@@ -98,7 +99,7 @@ async def update_channels():
                 except Exception as e:
                     logging.error(f"Fehler bei Channel {CHANNEL_IDS[i]}: {e}")
 
-        # DAX40-Trend berechnen
+        # DAX40-Trend
         avg = get_dax40_average_change()
         if avg is not None:
             if avg > 0.3:
@@ -119,13 +120,13 @@ async def update_channels():
             except Exception as e:
                 logging.error(f"Fehler beim Gesamttrend-Channel: {e}")
 
-        await asyncio.sleep(900)  # alle 15 Minuten
+        await asyncio.sleep(900)  # 15 Minuten
 
-# Discord-Bot-Klasse mit async Start
+# 🧠 Bot-Klasse mit setup_hook()
 class DAXBot(discord.Client):
     async def setup_hook(self):
         self.bg_task = self.loop.create_task(update_channels())
 
-# Starte Bot
+# ▶️ Bot starten
 client = DAXBot(intents=intents)
 client.run(TOKEN)
