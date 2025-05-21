@@ -102,7 +102,7 @@ async def update_channels():
                     new_name = format_ticker(name, changes[ticker])
                     print(f"  ✅ Aktualisiere {name}: {new_name}")
                     await channel.edit(name=new_name)
-                    await asyncio.sleep(1.5)  # Rate-Limit einhalten!
+                    await asyncio.sleep(2.5)  # Rate-Limit einhalten!
                 except Exception as e:
                     logging.error(f"Fehler bei Channel {CHANNEL_IDS[i]}: {e}")
             else:
