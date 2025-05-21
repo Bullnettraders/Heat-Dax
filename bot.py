@@ -8,10 +8,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# 🔐 Bot-Token und Channel-IDs aus Umgebungsvariablen
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_IDS = os.getenv("CHANNEL_IDS").split(",")  # Kommagetrennt
 TREND_CHANNEL_ID = int(os.getenv("TREND_CHANNEL_ID"))
 
+# 🏦 DAX Top 10 – Ticker und zugehörige Namen
 TICKERS = {
     "SAP.DE": "SAP SE",
     "SIE.DE": "Siemens",
@@ -25,11 +27,13 @@ TICKERS = {
     "MUV2.DE": "Munich Re"
 }
 
+# 📋 Logging konfigurieren
 logging.basicConfig(level=logging.INFO)
 
+# ⚙️ Discord Intents
 intents = discord.Intents.default()
-client = discord.Client(intents=intents)
 
+# 📈 Preisänderungen holen
 def get_price_changes():
     changes = {}
     for ticker, name in TICKERS.items():
@@ -42,6 +46,7 @@ def get_price_changes():
             logging.warning(f"Fehler bei {ticker}: {e}")
     return changes
 
+# 🟢🔴🟡 Emoji je nach Veränderung
 def format_ticker(name, change):
     if change > 0.3:
         symbol = "🟢"
@@ -51,13 +56,14 @@ def format_ticker(name, change):
         symbol = "🟡"
     return f"{symbol} {name} {change:+.2f}%"
 
+# 🔄 Haupt-Update-Funktion
 async def update_channels():
     await client.wait_until_ready()
     while not client.is_closed():
         logging.info("Aktualisiere Kanäle ...")
         changes = get_price_changes()
 
-        # Einzelne Ticker-Channels
+        # Einzelne Ticker-Kanäle aktualisieren
         for i, (ticker, name) in enumerate(TICKERS.items()):
             if i >= len(CHANNEL_IDS):
                 break
@@ -69,7 +75,7 @@ async def update_channels():
                 except Exception as e:
                     logging.error(f"Fehler bei Channel {CHANNEL_IDS[i]}: {e}")
 
-        # Gesamttrend
+        # Gesamttrend aktualisieren
         if changes:
             avg = sum(changes.values()) / len(changes)
             if avg > 0.3:
@@ -90,11 +96,13 @@ async def update_channels():
             except Exception as e:
                 logging.error(f"Fehler beim Gesamttrend-Channel: {e}")
 
-        await asyncio.sleep(900)  # alle 15 Minuten
+        await asyncio.sleep(900)  # 15 Minuten warten
 
-@client.event
-async def on_ready():
-    logging.info(f"Bot eingeloggt als {client.user}")
+# ✅ Bot-Klasse mit setup_hook
+class DAXBot(discord.Client):
+    async def setup_hook(self):
+        self.bg_task = self.loop.create_task(update_channels())
 
-client.loop.create_task(update_channels())
+# 🚀 Bot starten
+client = DAXBot(intents=intents)
 client.run(TOKEN)
