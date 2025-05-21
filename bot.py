@@ -13,7 +13,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_IDS = os.getenv("CHANNEL_IDS").split(",")  # Kommagetrennt, 10 IDs
 TREND_CHANNEL_ID = int(os.getenv("TREND_CHANNEL_ID"))
 
-# 🏦 Top 10 DAX Ticker → Name
+# 🏦 Top 10 DAX-Ticker → Name
 TICKERS = {
     "SAP.DE": "SAP SE",
     "SIE.DE": "Siemens",
@@ -40,29 +40,33 @@ logging.basicConfig(level=logging.INFO)
 
 intents = discord.Intents.default()
 
-# 📊 Kursveränderung (Top 10)
+# 📊 Preisänderungen (Top 10) aus history
 def get_price_changes():
     changes = {}
     for ticker, name in TICKERS.items():
         try:
-            data = yf.Ticker(ticker).fast_info
-            if "last_price" in data and "previous_close" in data and data["previous_close"] != 0:
-                percent = 100 * (data["last_price"] - data["previous_close"]) / data["previous_close"]
+            hist = yf.Ticker(ticker).history(period="2d")
+            if len(hist) >= 2:
+                yesterday = hist["Close"].iloc[-2]
+                today = hist["Close"].iloc[-1]
+                percent = 100 * (today - yesterday) / yesterday
                 changes[ticker] = round(percent, 2)
             else:
-                logging.warning(f"Unvollständige Daten für {ticker}")
+                logging.warning(f"Nicht genug Daten für {ticker}")
         except Exception as e:
             logging.warning(f"Fehler bei {ticker}: {e}")
     return changes
 
-# 📊 Durchschnitt aller DAX40
+# 📊 Durchschnitt aller DAX40 aus history
 def get_dax40_average_change():
     changes = []
     for ticker in DAX40_TICKERS:
         try:
-            data = yf.Ticker(ticker).fast_info
-            if "last_price" in data and "previous_close" in data and data["previous_close"] != 0:
-                percent = 100 * (data["last_price"] - data["previous_close"]) / data["previous_close"]
+            hist = yf.Ticker(ticker).history(period="2d")
+            if len(hist) >= 2:
+                yesterday = hist["Close"].iloc[-2]
+                today = hist["Close"].iloc[-1]
+                percent = 100 * (today - yesterday) / yesterday
                 changes.append(percent)
         except Exception as e:
             logging.warning(f"Fehler bei {ticker}: {e}")
@@ -70,7 +74,7 @@ def get_dax40_average_change():
         return None
     return sum(changes) / len(changes)
 
-# 🟢🟡🔴 Emoji-Logik
+# 🟢🟡🔴 Emoji je nach Kursverlauf
 def format_ticker(name, change):
     if change > 0.3:
         symbol = "🟢"
@@ -80,14 +84,14 @@ def format_ticker(name, change):
         symbol = "🟡"
     return f"{symbol} {name} {change:+.2f}%"
 
-# 🔁 Alle Channels aktualisieren
+# 🔁 Alle Kanäle aktualisieren
 async def update_channels():
     await client.wait_until_ready()
     while not client.is_closed():
         logging.info("Aktualisiere Kanäle ...")
         changes = get_price_changes()
 
-        # Einzelne Top-10-Kanäle
+        # Einzelne Ticker-Kanäle
         for i, (ticker, name) in enumerate(TICKERS.items()):
             if i >= len(CHANNEL_IDS):
                 break
@@ -99,7 +103,7 @@ async def update_channels():
                 except Exception as e:
                     logging.error(f"Fehler bei Channel {CHANNEL_IDS[i]}: {e}")
 
-        # DAX40-Trend
+        # DAX40-Trend berechnen
         avg = get_dax40_average_change()
         if avg is not None:
             if avg > 0.3:
@@ -122,7 +126,7 @@ async def update_channels():
 
         await asyncio.sleep(900)  # 15 Minuten
 
-# 🧠 Bot-Klasse mit setup_hook()
+# Bot-Klasse mit async setup
 class DAXBot(discord.Client):
     async def setup_hook(self):
         self.bg_task = self.loop.create_task(update_channels())
